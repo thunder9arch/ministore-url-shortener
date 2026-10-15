@@ -1,0 +1,31 @@
+# 3 stateless app servers behind nginx, talking to a MiniStore cluster.
+#   3 storage nodes:  docker compose --profile three up --build
+#   1 storage node :  NODES=http://node1:7001 RF=1 docker compose up --build
+# Storage nodes are CPU-limited so adding nodes visibly adds capacity (see README, Test 1).
+x-app: &app
+  build: .
+  environment:
+    NODES: ${NODES:-http://node1:7001,http://node2:7001,http://node3:7001}
+    RF: ${RF:-2}
+    CACHE: ${CACHE:-on}
+    BASE_URL: ${BASE_URL:-http://localhost:8080}
+    PORT: "3000"
+  depends_on: [node1]
+  cpus: 0.5
+x-node: &node
+  build: .
+  command: ["node", "src/ministore/server.js"]
+  environment: { PORT: "7001" }
+  cpus: 0.25
+services:
+  node1: { <<: *node, environment: { PORT: "7001", NODE_ID: node1 } }
+  node2: { <<: *node, environment: { PORT: "7001", NODE_ID: node2 }, profiles: [three] }
+  node3: { <<: *node, environment: { PORT: "7001", NODE_ID: node3 }, profiles: [three] }
+  app1: *app
+  app2: *app
+  app3: *app
+  nginx:
+    image: nginx:1.27-alpine
+    volumes: ["./nginx.conf:/etc/nginx/nginx.conf:ro"]
+    ports: ["8080:80"]
+    depends_on: [app1, app2, app3]
